@@ -1,5 +1,5 @@
 import { Project } from "../../types";
-import { formatTime } from "../../utils/timeUtils";
+import { formatTime, formatHours } from "../../utils/timeUtils";
 import { useAppContext } from "../../context/AppContext";
 
 interface ProjectCardProps {
@@ -18,7 +18,7 @@ const ProjectCard = ({ project, onEdit, onDelete }: ProjectCardProps) => {
 
   return (
     <div
-      className={`bg-white rounded-lg shadow-md p-6 border-l-4 ${
+      className={`bg-white dark:bg-gray-800 rounded-lg shadow-md p-6 border-l-4 ${
         isActive ? "border-primary-600" : `border-${project.color}`
       }`}
       style={{
@@ -28,11 +28,13 @@ const ProjectCard = ({ project, onEdit, onDelete }: ProjectCardProps) => {
       }}
     >
       <div className="flex justify-between items-start mb-4">
-        <h3 className="text-xl font-semibold">{project.name}</h3>
+        <h3 className="text-xl font-semibold dark:text-white">
+          {project.name}
+        </h3>
         <div className="flex space-x-2">
           <button
             onClick={onEdit}
-            className="p-1 text-gray-600 hover:text-primary-600"
+            className="p-1 text-gray-600 dark:text-gray-400 hover:text-primary-600 dark:hover:text-primary-400"
             title="Edit project"
           >
             <svg
@@ -46,7 +48,7 @@ const ProjectCard = ({ project, onEdit, onDelete }: ProjectCardProps) => {
           </button>
           <button
             onClick={onDelete}
-            className="p-1 text-gray-600 hover:text-red-600"
+            className="p-1 text-gray-600 dark:text-gray-400 hover:text-red-600 dark:hover:text-red-400"
             title="Delete project"
           >
             <svg
@@ -65,12 +67,45 @@ const ProjectCard = ({ project, onEdit, onDelete }: ProjectCardProps) => {
         </div>
       </div>
 
-      <p className="text-gray-600 mb-4">{project.description}</p>
+      <p className="text-gray-600 dark:text-gray-300 mb-4">
+        {project.description}
+      </p>
+
+      {project.goalHours && (
+        <div className="mb-4">
+          <div className="flex justify-between items-center mb-1">
+            <span className="text-sm text-gray-500 dark:text-gray-400">
+              Progress:{" "}
+              {Math.round(
+                (project.totalTimeSpent / (project.goalHours * 3600)) * 100
+              )}
+              %
+            </span>
+            <span className="text-sm text-gray-500 dark:text-gray-400">
+              Goal: {formatHours(project.goalHours)}
+            </span>
+          </div>
+          <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2.5">
+            <div
+              className="h-2.5 rounded-full"
+              style={{
+                width: `${Math.min(
+                  100,
+                  (project.totalTimeSpent / (project.goalHours * 3600)) * 100
+                )}%`,
+                backgroundColor: `var(--${project.color})`,
+              }}
+            ></div>
+          </div>
+        </div>
+      )}
 
       <div className="flex justify-between items-center">
         <div>
-          <span className="text-sm text-gray-500">Total time:</span>
-          <span className="ml-2 font-mono">
+          <span className="text-sm text-gray-500 dark:text-gray-400">
+            Total time:
+          </span>
+          <span className="ml-2 font-mono dark:text-gray-300">
             {formatTime(project.totalTimeSpent)}
           </span>
         </div>

@@ -1,7 +1,8 @@
 import { useAppContext } from "../../context/AppContext";
-import { formatTime } from "../../utils/timeUtils";
+import { formatTime, formatHours } from "../../utils/timeUtils";
 import StatCard from "./StatCard";
 import TimeChart from "./TimeChart";
+import ProjectDistributionChart from "./ProjectDistributionChart";
 
 const Dashboard = () => {
   const { state } = useAppContext();
@@ -124,7 +125,10 @@ const Dashboard = () => {
         />
       </div>
 
-      <TimeChart />
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+        <TimeChart />
+        <ProjectDistributionChart />
+      </div>
 
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6 mb-8">
         <h3 className="text-xl font-semibold mb-4 dark:text-white">
@@ -145,6 +149,12 @@ const Dashboard = () => {
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
                     Total Time
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                    Goal
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                    Progress
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
                     Sessions
@@ -180,6 +190,43 @@ const Dashboard = () => {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">
                         {formatTime(project.totalTimeSpent)}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">
+                        {project.goalHours
+                          ? formatHours(project.goalHours)
+                          : "-"}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        {project.goalHours ? (
+                          <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2.5 mb-1">
+                            <div
+                              className="h-2.5 rounded-full"
+                              style={{
+                                width: `${Math.min(
+                                  100,
+                                  (project.totalTimeSpent /
+                                    (project.goalHours * 3600)) *
+                                    100
+                                )}%`,
+                                backgroundColor: `var(--${project.color})`,
+                              }}
+                            ></div>
+                          </div>
+                        ) : (
+                          <span className="text-sm text-gray-500 dark:text-gray-300">
+                            -
+                          </span>
+                        )}
+                        {project.goalHours && (
+                          <div className="text-xs text-gray-500 dark:text-gray-400">
+                            {Math.round(
+                              (project.totalTimeSpent /
+                                (project.goalHours * 3600)) *
+                                100
+                            )}
+                            %
+                          </div>
+                        )}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">
                         {projectSessions.length}

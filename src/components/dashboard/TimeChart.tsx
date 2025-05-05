@@ -164,6 +164,9 @@ const TimeChart = () => {
       title: {
         display: true,
         text: "Hours Worked by Project",
+        font: {
+          size: 16,
+        },
       },
       tooltip: {
         callbacks: {
