@@ -109,15 +109,87 @@ export const deleteSession = async (id: string): Promise<void> => {
   await db.delete("sessions", id);
 };
 
+// Backup data to localStorage
+export const backupData = async () => {
+  try {
+    const projects = await getAllProjects();
+    const sessions = await getAllSessions();
+
+    // Get active state from localStorage
+    const activeStateStr = localStorage.getItem("timeTrackerState");
+    const activeState = activeStateStr
+      ? JSON.parse(activeStateStr)
+      : { activeProject: null, activeSessions: [] };
+
+    // Create a complete backup
+    const backupData = {
+      projects,
+      completedSessions: sessions,
+      activeProject: activeState.activeProject,
+      activeSessions: activeState.activeSessions,
+      lastBackup: new Date().toISOString(),
+    };
+
+    // Save to localStorage
+    localStorage.setItem("timeTrackerBackup", JSON.stringify(backupData));
+    console.log("Data backup created:", new Date().toISOString());
+
+    return true;
+  } catch (error) {
+    console.error("Error backing up data:", error);
+    return false;
+  }
+};
+
 // Load initial data
 export const loadInitialData = async () => {
   try {
     // Check if we have any projects already
     const projects = await getAllProjects();
     if (projects.length === 0) {
-      console.log("No projects found, loading from localStorage if available");
+      console.log("No projects found, attempting to restore from backup");
 
-      // Try to load from localStorage if available
+      // First try to restore from backup
+      const backupStr = localStorage.getItem("timeTrackerBackup");
+      if (backupStr) {
+        try {
+          const backup = JSON.parse(backupStr);
+          console.log("Found backup from:", backup.lastBackup);
+
+          // Import projects
+          if (backup.projects && backup.projects.length > 0) {
+            console.log(`Restoring ${backup.projects.length} projects`);
+            for (const project of backup.projects) {
+              await addProject(project);
+            }
+          }
+
+          // Import completed sessions
+          if (backup.completedSessions && backup.completedSessions.length > 0) {
+            console.log(
+              `Restoring ${backup.completedSessions.length} sessions`
+            );
+            for (const session of backup.completedSessions) {
+              await addSession(session);
+            }
+          }
+
+          // Update active state
+          const activeState = {
+            activeProject: backup.activeProject,
+            activeSessions: backup.activeSessions || [],
+          };
+          localStorage.setItem("timeTrackerState", JSON.stringify(activeState));
+
+          console.log("Successfully restored data from backup");
+          return;
+        } catch (error) {
+          console.error("Error restoring from backup:", error);
+        }
+      }
+
+      // If no backup or backup failed, try the old method
+      console.log("No backup found, checking timeTrackerState");
       const savedState = localStorage.getItem("timeTrackerState");
       if (savedState) {
         const parsedState = JSON.parse(savedState);
@@ -139,8 +211,12 @@ export const loadInitialData = async () => {
           }
         }
 
-        console.log("Imported data from localStorage");
+        console.log("Imported data from timeTrackerState");
+      } else {
+        console.log("No data found to restore");
       }
+    } else {
+      console.log(`Database already contains ${projects.length} projects`);
     }
   } catch (error) {
     console.error("Error loading initial data:", error);

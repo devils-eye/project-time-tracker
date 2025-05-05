@@ -177,6 +177,78 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
     localStorage.setItem("timeTrackerState", JSON.stringify(activeState));
   }, [state.activeProject, state.activeSessions]);
 
+  // Backup complete state periodically and when state changes
+  useEffect(() => {
+    // Create an initial backup when the app loads
+    const initialBackup = async () => {
+      if (state.projects.length > 0 || state.completedSessions.length > 0) {
+        await db.backupData();
+      }
+    };
+
+    initialBackup();
+
+    // Set up periodic backup (every 5 minutes)
+    const backupInterval = setInterval(async () => {
+      await db.backupData();
+    }, 5 * 60 * 1000); // 5 minutes
+
+    // Cleanup interval on unmount
+    return () => clearInterval(backupInterval);
+  }, []);
+
+  // Backup when important state changes
+  useEffect(() => {
+    const backupOnChange = async () => {
+      await db.backupData();
+    };
+
+    backupOnChange();
+  }, [state.projects, state.completedSessions]);
+
+  // Backup data when the user is about to leave the page
+  useEffect(() => {
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      // Synchronously backup data
+      try {
+        // Create a synchronous backup
+        const projects = state.projects;
+        const completedSessions = state.completedSessions;
+        const activeState = {
+          activeProject: state.activeProject,
+          activeSessions: state.activeSessions,
+        };
+
+        // Create a complete backup
+        const backupData = {
+          projects,
+          completedSessions,
+          activeProject: activeState.activeProject,
+          activeSessions: activeState.activeSessions,
+          lastBackup: new Date().toISOString(),
+        };
+
+        // Save to localStorage
+        localStorage.setItem("timeTrackerBackup", JSON.stringify(backupData));
+        console.log("Emergency backup created before page unload");
+      } catch (error) {
+        console.error("Error creating emergency backup:", error);
+      }
+
+      // Standard beforeunload handling
+      event.preventDefault();
+      event.returnValue = "";
+    };
+
+    // Add event listener for beforeunload
+    window.addEventListener("beforeunload", handleBeforeUnload);
+
+    // Cleanup
+    return () => {
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+    };
+  }, [state]);
+
   // Context actions
   const addProject = async (project: Project) => {
     try {
