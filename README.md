@@ -1,54 +1,73 @@
-# React + TypeScript + Vite
+# Project Time Tracker
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+A time tracking application with project management, countdown and stopwatch timers, and statistics dashboard.
 
-Currently, two official plugins are available:
+## Features
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+- Track time using countdown or stopwatch timers
+- Manage projects with customizable colors
+- Set optional hour goals for projects
+- View statistics and reports
+- Light and dark mode with customizable color palettes
+- Data persistence across browsers and devices
 
-## Expanding the ESLint configuration
+## Setup and Running
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+### Prerequisites
 
-```js
-export default tseslint.config({
-  extends: [
-    // Remove ...tseslint.configs.recommended and replace with this
-    ...tseslint.configs.recommendedTypeChecked,
-    // Alternatively, use this for stricter rules
-    ...tseslint.configs.strictTypeChecked,
-    // Optionally, add this for stylistic rules
-    ...tseslint.configs.stylisticTypeChecked,
-  ],
-  languageOptions: {
-    // other options...
-    parserOptions: {
-      project: ['./tsconfig.node.json', './tsconfig.app.json'],
-      tsconfigRootDir: import.meta.dirname,
-    },
-  },
-})
+- Node.js (v14 or higher)
+- npm (v6 or higher)
+
+### Installation
+
+1. Clone the repository
+2. Install dependencies:
+   ```
+   npm install
+   ```
+
+### Running the Application
+
+To run both the client and server:
+
+```
+./start.sh
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+This will start:
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+- The React client on http://localhost:5173
+- The API server on http://localhost:3001
 
-export default tseslint.config({
-  plugins: {
-    // Add the react-x and react-dom plugins
-    'react-x': reactX,
-    'react-dom': reactDom,
-  },
-  rules: {
-    // other rules...
-    // Enable its recommended typescript rules
-    ...reactX.configs['recommended-typescript'].rules,
-    ...reactDom.configs.recommended.rules,
-  },
-})
+### Development
+
+- Client only: `npm run dev`
+- Server only: `npm run server`
+- Both: `npm run dev:all`
+
+### Building for Production
+
 ```
+npm run build
+```
+
+## Data Storage
+
+The application uses:
+
+- SQLite database (stored in the `data` directory) for persistent storage
+- localStorage for active sessions and theme preferences
+
+## Troubleshooting
+
+### Server Connection Issues
+
+If you see a "Server Connection Error" message:
+
+1. Make sure the server is running (`npm run server`)
+2. Check if port 3001 is available
+3. Restart the application using `./start.sh`
+
+### Data Not Syncing Between Browsers
+
+For data to sync between browsers, the server must be running. If you're using the application without the server, data will be saved locally but won't sync across browsers or devices.

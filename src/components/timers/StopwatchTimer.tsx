@@ -26,7 +26,7 @@ const StopwatchTimer = () => {
     };
   }, [intervalId]);
 
-  const handleStart = () => {
+  const handleStart = async () => {
     if (!state.activeProject) {
       alert("Please select a project first");
       return;
@@ -39,20 +39,26 @@ const StopwatchTimer = () => {
     const newSessionId = generateId();
     setSessionId(newSessionId);
 
-    startTimer({
-      id: newSessionId,
-      projectId: state.activeProject,
-      startTime: now,
-      endTime: null,
-      duration: 0,
-      type: "stopwatch",
-    });
-
+    // Start the timer interval first for better UI responsiveness
     const id = window.setInterval(() => {
       setTime((prevTime) => prevTime + 1);
     }, 1000);
-
     setIntervalId(id);
+
+    try {
+      // Then save the timer session to the server
+      await startTimer({
+        id: newSessionId,
+        projectId: state.activeProject,
+        startTime: now,
+        endTime: null,
+        duration: 0,
+        type: "stopwatch",
+      });
+    } catch (error) {
+      console.error("Failed to start timer:", error);
+      // Continue anyway since the UI is already updated
+    }
   };
 
   const handlePause = async () => {
@@ -87,7 +93,7 @@ const StopwatchTimer = () => {
     }
   };
 
-  const handleResume = () => {
+  const handleResume = async () => {
     if (!state.activeProject) {
       alert("Please select a project first");
       return;
@@ -102,20 +108,26 @@ const StopwatchTimer = () => {
     const newSessionId = generateId();
     setSessionId(newSessionId);
 
-    startTimer({
-      id: newSessionId,
-      projectId: state.activeProject,
-      startTime: now,
-      endTime: null,
-      duration: 0,
-      type: "stopwatch",
-    });
-
+    // Start the timer interval first for better UI responsiveness
     const id = window.setInterval(() => {
       setTime((prevTime) => prevTime + 1);
     }, 1000);
-
     setIntervalId(id);
+
+    try {
+      // Then save the timer session to the server
+      await startTimer({
+        id: newSessionId,
+        projectId: state.activeProject,
+        startTime: now,
+        endTime: null,
+        duration: 0,
+        type: "stopwatch",
+      });
+    } catch (error) {
+      console.error("Failed to resume timer:", error);
+      // Continue anyway since the UI is already updated
+    }
   };
 
   const handleReset = async () => {
@@ -149,9 +161,18 @@ const StopwatchTimer = () => {
     }
   };
 
+  // Get the active project color
+  const activeProject = state.projects.find(
+    (p) => p.id === state.activeProject
+  );
+  const projectColor = activeProject?.color || "amber-500";
+
   return (
     <div className="flex flex-col items-center" ref={timerContainerRef}>
-      <div className="text-8xl md:text-9xl font-mono mb-8 bg-black text-amber-400 p-8 rounded-lg shadow-lg timer-display w-full text-center">
+      <div
+        className="text-8xl md:text-9xl mb-8 p-4 timer-display w-full text-center"
+        style={{ color: `var(--${projectColor})` }}
+      >
         {formatTime(time)}
       </div>
 

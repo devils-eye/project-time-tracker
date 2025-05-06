@@ -2,6 +2,8 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Note: Orbitron font is imported in index.html */
+
 /* Base styles and font settings */
 :root {
   font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
@@ -197,10 +199,15 @@ body {
 
 /* Custom styles for timer display */
 .timer-display {
+  font-family: "Orbitron", sans-serif;
+  font-optical-sizing: auto;
+  font-weight: 700;
+  font-style: normal;
   font-variant-numeric: tabular-nums;
-  letter-spacing: 0.05em;
-  background-color: var(--card-bg);
-  color: var(--text-color);
+  letter-spacing: 0.1em;
+  background-color: transparent;
+  color: inherit;
+  text-shadow: 0 0 5px rgba(0, 0, 0, 0.15);
 }
 
 /* Dark mode overrides for Tailwind classes */

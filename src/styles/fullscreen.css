@@ -14,11 +14,13 @@
 
 /* Make the timer display larger in fullscreen */
 .flex.flex-col.items-center:fullscreen .timer-display {
-  font-size: 12rem !important;
+  font-size: 16rem !important;
+  font-weight: 800;
   margin-bottom: 3rem;
   padding: 2rem;
   width: auto;
   min-width: 80%;
+  text-shadow: 0 0 10px rgba(0, 0, 0, 0.2);
 }
 
 /* Style the buttons in fullscreen mode */

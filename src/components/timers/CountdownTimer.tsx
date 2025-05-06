@@ -33,7 +33,7 @@ const CountdownTimer = () => {
     }
   }, [initialDuration, isRunning, isPaused]);
 
-  const handleStart = () => {
+  const handleStart = async () => {
     if (!state.activeProject) {
       alert("Please select a project first");
       return;
@@ -51,16 +51,7 @@ const CountdownTimer = () => {
     const newSessionId = generateId();
     setSessionId(newSessionId);
 
-    startTimer({
-      id: newSessionId,
-      projectId: state.activeProject,
-      startTime: now,
-      endTime: null,
-      duration: 0,
-      type: "countdown",
-      initialDuration,
-    });
-
+    // Start the timer interval first for better UI responsiveness
     const id = window.setInterval(() => {
       setTimeLeft((prevTime) => {
         if (prevTime <= 1) {
@@ -81,6 +72,8 @@ const CountdownTimer = () => {
               duration: initialDuration,
               type: "countdown",
               initialDuration,
+            }).catch((error) => {
+              console.error("Failed to complete timer:", error);
             });
 
             setSessionId(null);
@@ -94,9 +87,25 @@ const CountdownTimer = () => {
     }, 1000);
 
     setIntervalId(id);
+
+    try {
+      // Then save the timer session to the server
+      await startTimer({
+        id: newSessionId,
+        projectId: state.activeProject,
+        startTime: now,
+        endTime: null,
+        duration: 0,
+        type: "countdown",
+        initialDuration,
+      });
+    } catch (error) {
+      console.error("Failed to start timer:", error);
+      // Continue anyway since the UI is already updated
+    }
   };
 
-  const handlePause = () => {
+  const handlePause = async () => {
     if (intervalId) {
       clearInterval(intervalId);
       setIntervalId(null);
@@ -104,9 +113,34 @@ const CountdownTimer = () => {
 
     setIsRunning(false);
     setIsPaused(true);
+
+    // If we have an active session, complete it
+    if (sessionId && startTime && state.activeProject) {
+      try {
+        const now = getCurrentDate();
+        const duration = initialDuration - timeLeft;
+
+        await completeTimer({
+          id: sessionId,
+          projectId: state.activeProject,
+          startTime,
+          endTime: now,
+          duration,
+          type: "countdown",
+          initialDuration,
+        });
+
+        // Create a new session ID for when we resume
+        setSessionId(null);
+        setStartTime(null);
+      } catch (error) {
+        console.error("Failed to pause timer:", error);
+        // Continue anyway since the UI is already updated
+      }
+    }
   };
 
-  const handleResume = () => {
+  const handleResume = async () => {
     if (!state.activeProject) {
       alert("Please select a project first");
       return;
@@ -114,6 +148,30 @@ const CountdownTimer = () => {
 
     setIsRunning(true);
     setIsPaused(false);
+
+    // Create a new session if needed
+    if (!sessionId) {
+      const now = getCurrentDate();
+      const newSessionId = generateId();
+      setSessionId(newSessionId);
+      setStartTime(now);
+
+      try {
+        // Save the new session to the server
+        await startTimer({
+          id: newSessionId,
+          projectId: state.activeProject,
+          startTime: now,
+          endTime: null,
+          duration: initialDuration - timeLeft,
+          type: "countdown",
+          initialDuration,
+        });
+      } catch (error) {
+        console.error("Failed to resume timer:", error);
+        // Continue anyway since the UI is already updated
+      }
+    }
 
     const id = window.setInterval(() => {
       setTimeLeft((prevTime) => {
@@ -135,6 +193,8 @@ const CountdownTimer = () => {
               duration: initialDuration,
               type: "countdown",
               initialDuration,
+            }).catch((error) => {
+              console.error("Failed to complete timer:", error);
             });
 
             setSessionId(null);
@@ -190,9 +250,18 @@ const CountdownTimer = () => {
     }
   };
 
+  // Get the active project color
+  const activeProject = state.projects.find(
+    (p) => p.id === state.activeProject
+  );
+  const projectColor = activeProject?.color || "amber-500";
+
   return (
     <div className="flex flex-col items-center" ref={timerContainerRef}>
-      <div className="text-8xl md:text-9xl font-mono mb-8 bg-black text-amber-400 p-8 rounded-lg shadow-lg timer-display w-full text-center">
+      <div
+        className="text-8xl md:text-9xl mb-8 p-4 timer-display w-full text-center"
+        style={{ color: `var(--${projectColor})` }}
+      >
         {formatTime(timeLeft)}
       </div>
 

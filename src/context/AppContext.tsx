@@ -6,7 +6,7 @@ import {
   useState,
 } from "react";
 import { AppState, Project, TimerSession } from "../types";
-import * as db from "../services/db";
+import { projectsApi, sessionsApi } from "../services/api";
 
 // Initial state
 const initialState: AppState = {
@@ -27,6 +27,7 @@ type Action =
   | { type: "COMPLETE_TIMER"; payload: TimerSession }
   | { type: "SET_PROJECTS"; payload: Project[] }
   | { type: "SET_COMPLETED_SESSIONS"; payload: TimerSession[] }
+  | { type: "SET_ACTIVE_SESSIONS"; payload: TimerSession[] }
   | { type: "LOAD_STATE"; payload: AppState };
 
 // Reducer function
@@ -88,6 +89,11 @@ const appReducer = (state: AppState, action: Action): AppState => {
         ...state,
         completedSessions: action.payload,
       };
+    case "SET_ACTIVE_SESSIONS":
+      return {
+        ...state,
+        activeSessions: action.payload,
+      };
     case "LOAD_STATE":
       return action.payload;
     default:
@@ -102,8 +108,8 @@ type AppContextType = {
   updateProject: (project: Project) => Promise<void>;
   deleteProject: (id: string) => Promise<void>;
   setActiveProject: (id: string | null) => void;
-  startTimer: (session: TimerSession) => void;
-  stopTimer: (id: string) => void;
+  startTimer: (session: TimerSession) => Promise<void>;
+  stopTimer: (id: string) => Promise<void>;
   completeTimer: (session: TimerSession) => Promise<void>;
   isLoading: boolean;
 };
@@ -115,51 +121,155 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
   const [state, dispatch] = useReducer(appReducer, initialState);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Initialize database and load data
+  // Initialize and load data from API
   useEffect(() => {
     const initializeApp = async () => {
       try {
         setIsLoading(true);
+        console.log("Initializing application...");
 
-        // Initialize the database
-        await db.initDB();
+        // Try to load data from API first
+        let serverAvailable = true;
 
-        // Load initial data from localStorage if needed
-        await db.loadInitialData();
+        // Load projects from API
+        console.log("Loading projects from API...");
+        try {
+          const projects = await projectsApi.getAll();
+          dispatch({ type: "SET_PROJECTS", payload: projects });
+          console.log(`Loaded ${projects.length} projects from API`);
+        } catch (projectsError) {
+          console.error("Failed to load projects from API:", projectsError);
+          serverAvailable = false;
 
-        // Load projects from database
-        const projects = await db.getAllProjects();
-        dispatch({ type: "SET_PROJECTS", payload: projects });
+          // Fall back to localStorage if available
+          const backupStr = localStorage.getItem("timeTrackerBackup");
+          if (backupStr) {
+            try {
+              const backup = JSON.parse(backupStr);
+              if (backup.projects && backup.projects.length > 0) {
+                dispatch({ type: "SET_PROJECTS", payload: backup.projects });
+                console.log(
+                  `Loaded ${backup.projects.length} projects from localStorage backup`
+                );
+              }
+            } catch (backupError) {
+              console.error(
+                "Failed to load projects from backup:",
+                backupError
+              );
+            }
+          }
+        }
 
-        // Load completed sessions from database
-        const sessions = await db.getAllSessions();
-        dispatch({ type: "SET_COMPLETED_SESSIONS", payload: sessions });
+        // Load completed sessions from API
+        console.log("Loading completed sessions from API...");
+        try {
+          if (serverAvailable) {
+            const sessions = await sessionsApi.getAll();
+            dispatch({ type: "SET_COMPLETED_SESSIONS", payload: sessions });
+            console.log(
+              `Loaded ${sessions.length} completed sessions from API`
+            );
+          } else {
+            throw new Error("Server unavailable, using backup");
+          }
+        } catch (sessionsError) {
+          console.error("Failed to load sessions from API:", sessionsError);
 
-        // Try to restore active project from localStorage
+          // Fall back to localStorage if available
+          const backupStr = localStorage.getItem("timeTrackerBackup");
+          if (backupStr) {
+            try {
+              const backup = JSON.parse(backupStr);
+              if (
+                backup.completedSessions &&
+                backup.completedSessions.length > 0
+              ) {
+                dispatch({
+                  type: "SET_COMPLETED_SESSIONS",
+                  payload: backup.completedSessions,
+                });
+                console.log(
+                  `Loaded ${backup.completedSessions.length} sessions from localStorage backup`
+                );
+              }
+            } catch (backupError) {
+              console.error(
+                "Failed to load sessions from backup:",
+                backupError
+              );
+            }
+          }
+        }
+
+        // Try to restore active project and sessions from localStorage
+        // (active sessions are still kept in localStorage for performance)
+        console.log("Restoring active state...");
         const savedState = localStorage.getItem("timeTrackerState");
         if (savedState) {
           try {
             const parsedState = JSON.parse(savedState);
+
+            // Restore active project
             if (parsedState.activeProject) {
+              console.log(
+                `Restoring active project: ${parsedState.activeProject}`
+              );
               dispatch({
                 type: "SET_ACTIVE_PROJECT",
                 payload: parsedState.activeProject,
               });
             }
+
+            // Restore active sessions
             if (
               parsedState.activeSessions &&
               parsedState.activeSessions.length > 0
             ) {
+              console.log(
+                `Restoring ${parsedState.activeSessions.length} active sessions`
+              );
               parsedState.activeSessions.forEach((session: TimerSession) => {
                 dispatch({ type: "START_TIMER", payload: session });
               });
             }
-          } catch (error) {
-            console.error("Failed to parse saved state:", error);
+
+            console.log("Active state restored successfully");
+          } catch (parseError) {
+            console.error("Failed to parse saved state:", parseError);
+
+            // Create a fresh timeTrackerState if parsing failed
+            const freshState = {
+              activeProject: null,
+              activeSessions: [],
+            };
+            localStorage.setItem(
+              "timeTrackerState",
+              JSON.stringify(freshState)
+            );
           }
+        } else {
+          console.log("No active state found in localStorage");
         }
+
+        console.log("Application initialization complete");
       } catch (error) {
         console.error("Failed to initialize app:", error);
+
+        // Store error information
+        try {
+          localStorage.setItem("initializationFailed", "true");
+          localStorage.setItem("lastInitializationError", String(error));
+          localStorage.setItem(
+            "lastInitializationAttempt",
+            new Date().toISOString()
+          );
+        } catch (storageError) {
+          console.error(
+            "Failed to save initialization error info:",
+            storageError
+          );
+        }
       } finally {
         setIsLoading(false);
       }
@@ -168,101 +278,216 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
     initializeApp();
   }, []);
 
-  // Save active state to localStorage
+  // Save active state to localStorage and server
   useEffect(() => {
     const activeState = {
       activeProject: state.activeProject,
       activeSessions: state.activeSessions,
     };
+
+    // Save to localStorage
     localStorage.setItem("timeTrackerState", JSON.stringify(activeState));
+
+    // Save active sessions to server
+    if (state.activeSessions.length > 0) {
+      state.activeSessions.forEach(async (session) => {
+        try {
+          // Only save if the session has a valid ID and projectId
+          if (session.id && session.projectId) {
+            await sessionsApi.saveActiveSession({
+              ...session,
+              elapsedTime: session.duration,
+            });
+          }
+        } catch (error) {
+          console.error("Failed to save active session to server:", error);
+        }
+      });
+    }
   }, [state.activeProject, state.activeSessions]);
 
-  // Backup complete state periodically and when state changes
+  // Poll for active sessions from other browsers
   useEffect(() => {
-    // Create an initial backup when the app loads
-    const initialBackup = async () => {
-      if (state.projects.length > 0 || state.completedSessions.length > 0) {
-        await db.backupData();
+    // Function to fetch active sessions
+    const fetchActiveSessions = async () => {
+      try {
+        const activeSessions = await sessionsApi.getActiveSessions();
+
+        // Filter out sessions that are already in our state (by ID)
+        const currentSessionIds = state.activeSessions.map((s) => s.id);
+        const newSessions = activeSessions.filter(
+          (session) => !currentSessionIds.includes(session.id)
+        );
+
+        // If we found new sessions, add them to our state
+        if (newSessions.length > 0) {
+          console.log(
+            `Found ${newSessions.length} active sessions from other browsers`
+          );
+          dispatch({
+            type: "SET_ACTIVE_SESSIONS",
+            payload: [...state.activeSessions, ...newSessions],
+          });
+
+          // If we don't have an active project but there's an active session, set the active project
+          if (!state.activeProject && newSessions.length > 0) {
+            dispatch({
+              type: "SET_ACTIVE_PROJECT",
+              payload: newSessions[0].projectId,
+            });
+          }
+        }
+      } catch (error) {
+        console.error("Failed to fetch active sessions:", error);
       }
     };
 
-    initialBackup();
+    // Initial fetch
+    fetchActiveSessions();
 
-    // Set up periodic backup (every 5 minutes)
-    const backupInterval = setInterval(async () => {
-      await db.backupData();
-    }, 5 * 60 * 1000); // 5 minutes
+    // Set up polling interval (every 5 seconds)
+    const intervalId = setInterval(fetchActiveSessions, 5000);
 
-    // Cleanup interval on unmount
-    return () => clearInterval(backupInterval);
-  }, []);
+    // Clean up interval on unmount
+    return () => clearInterval(intervalId);
+  }, [state.activeSessions, state.activeProject]);
 
-  // Backup when important state changes
-  useEffect(() => {
-    const backupOnChange = async () => {
-      await db.backupData();
-    };
-
-    backupOnChange();
-  }, [state.projects, state.completedSessions]);
-
-  // Backup data when the user is about to leave the page
+  // Handle page unload and visibility change
   useEffect(() => {
     const handleBeforeUnload = (event: BeforeUnloadEvent) => {
-      // Synchronously backup data
+      // Save active state to localStorage before unload
       try {
-        // Create a synchronous backup
-        const projects = state.projects;
-        const completedSessions = state.completedSessions;
         const activeState = {
           activeProject: state.activeProject,
           activeSessions: state.activeSessions,
         };
 
-        // Create a complete backup
-        const backupData = {
-          projects,
-          completedSessions,
-          activeProject: activeState.activeProject,
-          activeSessions: activeState.activeSessions,
-          lastBackup: new Date().toISOString(),
-        };
-
         // Save to localStorage
-        localStorage.setItem("timeTrackerBackup", JSON.stringify(backupData));
-        console.log("Emergency backup created before page unload");
+        localStorage.setItem("timeTrackerState", JSON.stringify(activeState));
+        console.log("Active state saved before page unload");
       } catch (error) {
-        console.error("Error creating emergency backup:", error);
+        console.error("Error saving active state:", error);
       }
 
-      // Standard beforeunload handling
-      event.preventDefault();
-      event.returnValue = "";
+      // Only show confirmation dialog if there are active timer sessions
+      if (state.activeSessions.length > 0) {
+        event.preventDefault();
+        event.returnValue = "";
+        return "";
+      }
     };
 
-    // Add event listener for beforeunload
-    window.addEventListener("beforeunload", handleBeforeUnload);
+    // Only add the beforeunload event listener if there are active sessions
+    if (state.activeSessions.length > 0) {
+      console.log("Adding beforeunload event listener for active sessions");
+      window.addEventListener("beforeunload", handleBeforeUnload);
+    } else {
+      // Remove the event listener if it was previously added
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+    }
+
+    // Also handle visibilitychange to catch when the page is hidden
+    // (useful for mobile browsers that might not trigger beforeunload)
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "hidden") {
+        // Save active state when the page is hidden
+        const activeState = {
+          activeProject: state.activeProject,
+          activeSessions: state.activeSessions,
+        };
+        localStorage.setItem("timeTrackerState", JSON.stringify(activeState));
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
 
     // Cleanup
     return () => {
       window.removeEventListener("beforeunload", handleBeforeUnload);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
-  }, [state]);
+  }, [state.activeSessions.length, state.activeProject]);
 
   // Context actions
   const addProject = async (project: Project) => {
     try {
-      await db.addProject(project);
+      // Try to save to server
+      await projectsApi.create(project);
       dispatch({ type: "ADD_PROJECT", payload: project });
+
+      // Also save to localStorage backup
+      const backupStr = localStorage.getItem("timeTrackerBackup");
+      if (backupStr) {
+        try {
+          const backup = JSON.parse(backupStr);
+          backup.projects = [...(backup.projects || []), project];
+          backup.lastBackup = new Date().toISOString();
+          localStorage.setItem("timeTrackerBackup", JSON.stringify(backup));
+        } catch (backupError) {
+          console.error(
+            "Failed to update backup after adding project:",
+            backupError
+          );
+        }
+      } else {
+        // Create new backup
+        const newBackup = {
+          version: 1,
+          projects: [project],
+          completedSessions: state.completedSessions,
+          lastBackup: new Date().toISOString(),
+        };
+        localStorage.setItem("timeTrackerBackup", JSON.stringify(newBackup));
+      }
     } catch (error) {
       console.error("Failed to add project:", error);
+
+      // If server is unavailable, still add to local state and backup
+      if (
+        error instanceof Error &&
+        error.message.includes("Server connection failed")
+      ) {
+        dispatch({ type: "ADD_PROJECT", payload: project });
+
+        // Update localStorage backup
+        const backupStr = localStorage.getItem("timeTrackerBackup");
+        if (backupStr) {
+          try {
+            const backup = JSON.parse(backupStr);
+            backup.projects = [...(backup.projects || []), project];
+            backup.lastBackup = new Date().toISOString();
+            localStorage.setItem("timeTrackerBackup", JSON.stringify(backup));
+            console.log(
+              "Project saved to localStorage backup due to server unavailability"
+            );
+          } catch (backupError) {
+            console.error(
+              "Failed to update backup after adding project:",
+              backupError
+            );
+          }
+        } else {
+          // Create new backup
+          const newBackup = {
+            version: 1,
+            projects: [project],
+            completedSessions: state.completedSessions,
+            lastBackup: new Date().toISOString(),
+          };
+          localStorage.setItem("timeTrackerBackup", JSON.stringify(newBackup));
+        }
+
+        // Don't throw error if we managed to save locally
+        return;
+      }
+
       throw error;
     }
   };
 
   const updateProject = async (project: Project) => {
     try {
-      await db.updateProject(project);
+      await projectsApi.update(project);
       dispatch({ type: "UPDATE_PROJECT", payload: project });
     } catch (error) {
       console.error("Failed to update project:", error);
@@ -272,7 +497,7 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
 
   const deleteProject = async (id: string) => {
     try {
-      await db.deleteProject(id);
+      await projectsApi.delete(id);
       dispatch({ type: "DELETE_PROJECT", payload: id });
     } catch (error) {
       console.error("Failed to delete project:", error);
@@ -284,31 +509,75 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
     dispatch({ type: "SET_ACTIVE_PROJECT", payload: id });
   };
 
-  const startTimer = (session: TimerSession) => {
+  const startTimer = async (session: TimerSession) => {
+    // Update local state
     dispatch({ type: "START_TIMER", payload: session });
+
+    // Save active session to server
+    try {
+      await sessionsApi.saveActiveSession(session);
+      console.log("Active session saved to server");
+    } catch (error) {
+      console.error("Failed to save active session to server:", error);
+      // Continue anyway since we've updated the local state
+    }
   };
 
-  const stopTimer = (id: string) => {
+  const stopTimer = async (id: string) => {
+    // Find the session in active sessions
+    const session = state.activeSessions.find((s) => s.id === id);
+
+    // Update local state
     dispatch({ type: "STOP_TIMER", payload: id });
+
+    // If we found the session, complete it on the server
+    if (session) {
+      try {
+        const now = new Date().toISOString();
+        await sessionsApi.completeActiveSession(id, now, session.duration);
+        console.log("Active session stopped and completed on server");
+      } catch (error) {
+        console.error("Failed to stop active session on server:", error);
+        // Continue anyway since we've updated the local state
+      }
+    }
   };
 
   const completeTimer = async (session: TimerSession) => {
     try {
-      await db.addSession(session);
+      // First, try to complete the active session if it exists
+      try {
+        await sessionsApi.completeActiveSession(
+          session.id,
+          session.endTime || new Date().toISOString(),
+          session.duration
+        );
+        console.log("Active session completed on server");
+      } catch (activeError) {
+        console.warn(
+          "Failed to complete active session, falling back to create:",
+          activeError
+        );
 
-      // Update project's total time spent
-      const project = state.projects.find((p) => p.id === session.projectId);
-      if (project) {
-        const updatedProject = {
-          ...project,
-          totalTimeSpent: project.totalTimeSpent + session.duration,
-          updatedAt: new Date().toISOString(),
-        };
-        await db.updateProject(updatedProject);
-        dispatch({ type: "UPDATE_PROJECT", payload: updatedProject });
+        // If that fails, add the completed session to the server as a new session
+        await sessionsApi.create(session);
       }
 
+      // The server will automatically update the project's total time spent
+
+      // Update the local state
       dispatch({ type: "COMPLETE_TIMER", payload: session });
+
+      // Refresh the projects to get the updated totalTimeSpent
+      try {
+        const projects = await projectsApi.getAll();
+        dispatch({ type: "SET_PROJECTS", payload: projects });
+      } catch (refreshError) {
+        console.error(
+          "Failed to refresh projects after timer completion:",
+          refreshError
+        );
+      }
     } catch (error) {
       console.error("Failed to complete timer:", error);
       throw error;

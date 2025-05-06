@@ -6,6 +6,8 @@ import Projects from "./pages/Projects";
 import Timer from "./pages/Timer";
 import DashboardPage from "./pages/DashboardPage";
 import LoadingSpinner from "./components/common/LoadingSpinner";
+import DatabaseStatus from "./components/common/DatabaseStatus";
+import ServerStatus from "./components/common/ServerStatus";
 import "./App.css";
 import "./styles/fullscreen.css";
 
@@ -35,6 +37,8 @@ function App() {
     <AppProvider>
       <ThemeProvider>
         <AppContent />
+        <DatabaseStatus />
+        <ServerStatus />
       </ThemeProvider>
     </AppProvider>
   );

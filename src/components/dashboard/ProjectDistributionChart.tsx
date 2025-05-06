@@ -1,11 +1,5 @@
 import { useState } from "react";
-import {
-  Chart as ChartJS,
-  ArcElement,
-  Tooltip,
-  Legend,
-  Title,
-} from "chart.js";
+import { Chart as ChartJS, ArcElement, Tooltip, Legend, Title } from "chart.js";
 import { Pie } from "react-chartjs-2";
 import { useAppContext } from "../../context/AppContext";
 import { isToday } from "../../utils/dateUtils";
@@ -50,47 +44,71 @@ const ProjectDistributionChart = () => {
   // Group sessions by project
   const getProjectData = () => {
     const todaySessions = getTodaySessions();
-    
+
     // Create a map to store total duration by project
     const projectDurations = new Map<string, number>();
-    
+
     // Calculate total duration for each project
     todaySessions.forEach((session) => {
       const projectId = session.projectId;
       const currentDuration = projectDurations.get(projectId) || 0;
       projectDurations.set(projectId, currentDuration + session.duration);
     });
-    
+
     // Prepare data for the pie chart
     const labels: string[] = [];
     const data: number[] = [];
     const backgroundColor: string[] = [];
     const borderColor: string[] = [];
-    
+
     // Convert the map to arrays for Chart.js
-    projectDurations.forEach((duration, projectId) => {
-      const project = state.projects.find(p => p.id === projectId);
+    // Sort by duration (descending) to make the chart more readable
+    const sortedProjects = Array.from(projectDurations.entries()).sort(
+      (a, b) => b[1] - a[1]
+    ); // Sort by duration (descending)
+
+    sortedProjects.forEach(([projectId, duration]) => {
+      const project = state.projects.find((p) => p.id === projectId);
       if (project) {
         labels.push(project.name);
         // Convert seconds to hours
         data.push(Math.round((duration / 3600) * 100) / 100);
-        
+
+        // Get the color from CSS variables
         const color = getCssVariableValue(`--${project.color}`);
-        backgroundColor.push(hexToRgba(color, 0.7));
-        borderColor.push(color);
+        // Make sure the color is valid
+        const validColor = color.trim() || "#6366f1";
+
+        backgroundColor.push(hexToRgba(validColor, 0.8));
+        borderColor.push(validColor);
       }
     });
-    
+
+    // If there's no data, add a placeholder
+    if (data.length === 0 && state.projects.length > 0) {
+      // Add a sample project to show the chart structure
+      const sampleProject = state.projects[0];
+      labels.push("No data for today");
+      data.push(1);
+      const color = getCssVariableValue(`--gray-400`);
+      backgroundColor.push(hexToRgba(color, 0.5));
+      borderColor.push(color);
+    }
+
     return {
       labels,
       data,
       backgroundColor,
       borderColor,
-      totalTime: todaySessions.reduce((total, session) => total + session.duration, 0)
+      totalTime: todaySessions.reduce(
+        (total, session) => total + session.duration,
+        0
+      ),
     };
   };
 
-  const { labels, data, backgroundColor, borderColor, totalTime } = getProjectData();
+  const { labels, data, backgroundColor, borderColor, totalTime } =
+    getProjectData();
   const hasData = data.length > 0;
 
   // Prepare chart data
@@ -110,49 +128,93 @@ const ProjectDistributionChart = () => {
   const options = {
     responsive: true,
     maintainAspectRatio: false,
+    cutout: "0%", // Ensure it's a proper pie chart with no cutout
+    radius: "90%", // Make the pie chart slightly smaller to fit better
     plugins: {
       legend: {
         position: "right" as const,
+        align: "center" as const,
         labels: {
           padding: 20,
           boxWidth: 12,
           font: {
-            size: 12
-          }
-        }
+            size: 12,
+          },
+          generateLabels: function (chart: any) {
+            // Custom label generation to ensure colors match
+            const data = chart.data;
+            if (data.labels.length && data.datasets.length) {
+              return data.labels.map(function (label: string, i: number) {
+                const meta = chart.getDatasetMeta(0);
+                const style = meta.controller.getStyle(i);
+
+                return {
+                  text: label,
+                  fillStyle: style.backgroundColor,
+                  strokeStyle: style.borderColor,
+                  lineWidth: style.borderWidth,
+                  hidden: !chart.getDataVisibility(i),
+                  index: i,
+                };
+              });
+            }
+            return [];
+          },
+        },
       },
       title: {
         display: true,
         text: "Today's Time Distribution",
         font: {
-          size: 16
-        }
+          size: 16,
+        },
       },
       tooltip: {
         callbacks: {
-          label: function(context: any) {
-            const label = context.label || '';
+          label: function (context: any) {
+            const label = context.label || "";
             const value = context.raw || 0;
-            const percentage = Math.round((value / data.reduce((a, b) => a + b, 0)) * 100);
+            const total = data.reduce((a, b) => a + b, 0);
+            const percentage =
+              total > 0 ? Math.round((value / total) * 100) : 0;
             return `${label}: ${value.toFixed(2)} hours (${percentage}%)`;
-          }
-        }
-      }
+          },
+        },
+      },
+    },
+    layout: {
+      padding: {
+        top: 10,
+        bottom: 10,
+        left: 10,
+        right: 10,
+      },
+    },
+    animation: {
+      animateRotate: true,
+      animateScale: true,
     },
   };
 
   return (
     <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6 mb-8">
       <div className="flex justify-between items-center mb-6">
-        <h3 className="text-xl font-semibold dark:text-white">Today's Distribution</h3>
+        <h3 className="text-xl font-semibold dark:text-white">
+          Today's Distribution
+        </h3>
         <div className="text-sm text-gray-500 dark:text-gray-400">
           Total: {formatTime(totalTime)}
         </div>
       </div>
 
       {hasData ? (
-        <div className="h-80">
-          <Pie data={chartData} options={options} />
+        <div className="h-80 w-full flex justify-center items-center">
+          {/* Use a fixed aspect ratio container for the pie chart */}
+          <div className="w-full h-full flex items-center justify-center">
+            <div className="aspect-square h-64 relative">
+              <Pie data={chartData} options={options} />
+            </div>
+          </div>
         </div>
       ) : (
         <div className="h-80 flex items-center justify-center">
